@@ -1,0 +1,8 @@
+# sound effect 0B: brush (original design)
+name brush
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst puff wave=noise noiserate=30 a=0.01 d=0.1 s=0.0 r=0.05 gain=0.56 cutoff=1800 hp=300
+n 0 puff 70 3 1.0
+length 3

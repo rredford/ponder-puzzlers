@@ -1,0 +1,9 @@
+# sound effect 07: boots (original design)
+name boots
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst tick wave=pulse duty=0.125 a=0.002 d=0.03 s=0.0 r=0.06 gain=0.396 cutoff=7000 verb=0.2
+n 0 tick 96 1 0.9
+n 2 tick 91 1 0.7
+length 3

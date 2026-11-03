@@ -1,0 +1,10 @@
+# sound effect 0F: push (original design)
+name push
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst scrape wave=noise noiserate=10 a=0.01 d=0.1 s=0.3 r=0.05 gain=0.44 cutoff=800
+inst groan wave=saw a=0.01 d=0.1 s=0.5 r=0.05 gain=0.16 cutoff=400
+n 0 scrape 50 4 1.0
+n 0 groan 33 4 1.0 to=31
+length 4

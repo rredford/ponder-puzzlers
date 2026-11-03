@@ -1,0 +1,12 @@
+# sound effect 10: fire (original design)
+name fire
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst crackle wave=metal noiserate=12 a=0.002 d=0.06 s=0.0 r=0.03 gain=0.448 cutoff=6000 hp=600
+inst roar wave=noise noiserate=20 a=0.002 d=0.2 s=0.0 r=0.05 gain=0.28 cutoff=1500
+n 0 roar 60 5 1.0
+n 0 crackle 72 1 0.9
+n 2 crackle 77 1 0.7
+n 3 crackle 69 1 0.8
+length 5

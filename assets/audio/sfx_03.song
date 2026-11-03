@@ -1,0 +1,21 @@
+# sound effect 03: warp (original design)
+name warp
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst arp wave=pulse duty=0.3 a=0.002 d=0.08 s=0.3 r=0.06 gain=0.18 cutoff=7000 verb=0.4 delay=0.35
+inst whoosh wave=noise noiserate=40 a=0.05 d=0.4 s=0.0 r=0.05 gain=0.12 cutoff=1200 fenv=6000 fdecay=0.3
+n 0 arp 72 1 0.9
+n 1 arp 76 1 0.86
+n 2 arp 79 1 0.8200000000000001
+n 3 arp 84 1 0.78
+n 4 arp 84 1 0.74
+n 5 arp 88 1 0.7
+n 6 arp 91 1 0.66
+n 7 arp 96 1 0.62
+n 8 arp 96 1 0.5800000000000001
+n 9 arp 100 1 0.54
+n 10 arp 103 1 0.5
+n 11 arp 108 1 0.46
+n 0 whoosh 80 12 0.8
+length 12

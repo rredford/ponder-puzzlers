@@ -1,0 +1,10 @@
+# sound effect 08: bump (original design)
+name bump
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst thud wave=sine pslide=12 pdecay=0.02 a=0.001 d=0.08 s=0.0 r=0.03 gain=0.45
+inst tap wave=noise noiserate=40 a=0.002 d=0.03 s=0.0 r=0.05 gain=0.15 cutoff=700
+n 0 thud 43 2 1.0
+n 0 tap 60 1 0.7
+length 2

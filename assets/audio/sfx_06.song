@@ -1,0 +1,12 @@
+# sound effect 06: ice-loop (original design)
+name ice-loop
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst hiss wave=noise noiserate=60 a=0.05 d=0.1 s=1.0 r=0.1 gain=0.16 cutoff=3500 hp=900
+inst glass wave=sine mix2=0.4 oct2=1 detune=7 a=0.02 d=0.3 s=0.0 r=0.2 gain=0.1 verb=0.4
+n 0 hiss 80 16 1.0
+n 0 glass 100 6 0.7
+n 8 glass 103 6 0.6
+length 16
+loop 0

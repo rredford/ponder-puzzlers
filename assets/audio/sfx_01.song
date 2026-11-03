@@ -1,0 +1,10 @@
+# sound effect 01: popup (original design)
+name popup
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst sq wave=pulse duty=0.5 a=0.002 d=0.2 s=0.2 r=0.08 gain=0.35 cutoff=2500
+inst thump wave=noise noiserate=40 a=0.002 d=0.08 s=0.0 r=0.05 gain=0.42 cutoff=900
+n 0 sq 40 5 1.0 to=55
+n 0 thump 60 2 0.9
+length 5

@@ -1,0 +1,102 @@
+# CCLP5 (strict conversion) - outcomes on the ORIGINAL cartridge, levels injected (doc 09 §7)
+# level	tws_ticks	outcome	tick
+1	1573	win	1572
+2	1801	crash	9
+3	2264	death	530
+4	1108	death	126
+5	3733	stall	
+6	1669	death	1198
+7	1781	win	1780
+8	141	death	78
+9	860	death	26
+10	1704	crash	92
+11	1457	crash	1303
+12	1480	win	1479
+13	2395	death	171
+14	2763	stall	
+15	2911	stall	
+16	713	death	644
+17	1706	win	1705
+18	2884	stall	
+19	2941	death	206
+20	761	crash	17
+21	1242	win	1241
+22	731	crash	0
+23	1691	win	1690
+24	1484	death	120
+25	617	win	616
+26	1768	death	846
+27	3083	time-out	50
+28	2476	crash	430
+29	4331	win	4330
+30	2123	win	2122
+31	1845	crash	284
+32	2262	stall	
+33	3124	win	3123
+34	1057	crash	221
+35	1687	death	924
+36	845	death	138
+37	590	death	62
+38	2044	death	687
+39	1724	death	402
+40	1523	win	1522
+41	1362	death	897
+42	1853	death	1640
+43	1633	win	1632
+44	832	death	258
+45	2969	death	716
+46	4003	stall	
+47	343	stall	
+48	6740	death	1220
+49	2048	stall	
+50	2660	death	230
+51	2173	crash	0
+52	4679	death	2714
+53	2038	death	384
+54	1474	stall	
+55	3029	death	46
+56	1687	death	610
+57	3314	stall	
+58	298	win	297
+59	460	win	459
+60	2062	death	496
+61	5221	death	5050
+62	997	death	992
+63	2181	crash	0
+64	1283	death	824
+65	1959	stall	
+66	1285	death	748
+67	3912	death	198
+68	1018	death	102
+69	1374	death	182
+70	2180	death	116
+71	2085	death	450
+72	3543	crash	23
+73	1426	win	1425
+74	2487	death	568
+75	2219	win	2218
+76	1007	win	1006
+77	179	win	178
+78	368	win	367
+79	4055	death	904
+80	2157	death	520
+81	2745	death	212
+82	5409	stall	
+83	3583	death	1298
+84	2262	win	2261
+85	379	win	378
+86	1633	stall	
+87	1282	crash	287
+88	1958	death	180
+89	1721	win	1720
+90	1981	death	1308
+91	2259	death	730
+92	2400	death	406
+93	1739	death	14
+94	855	death	110
+95	1587	crash	29
+96	384	win	383
+97	542	crash	321
+98	1418	death	20
+99	6807	stall	
+100	568	death	100

@@ -1,0 +1,11 @@
+# sound effect 0C: splash (original design)
+name splash
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst water wave=noise noiserate=25 a=0.002 d=0.25 s=0.0 r=0.05 gain=0.468 cutoff=600 fenv=5000 fdecay=0.08
+inst bubble wave=sine a=0.002 d=0.06 s=0.0 r=0.03 gain=0.288
+n 0 water 70 6 1.0
+n 3 bubble 79 1 0.8 to=86
+n 5 bubble 84 1 0.6 to=91
+length 6

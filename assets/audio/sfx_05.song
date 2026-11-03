@@ -1,0 +1,10 @@
+# sound effect 05: door (original design)
+name door
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst clack wave=metal noiserate=6 a=0.001 d=0.05 s=0.0 r=0.03 gain=0.4 cutoff=5000
+inst slide wave=pulse duty=0.3 a=0.002 d=0.1 s=0.5 r=0.05 gain=0.288 cutoff=3000
+n 0 clack 70 1 1.0
+n 1 slide 64 5 0.8 to=52
+length 6

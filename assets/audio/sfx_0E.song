@@ -1,0 +1,14 @@
+# sound effect 0E: force-loop (original design)
+name force-loop
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst hum wave=pulse duty=0.3 pwm=0.15 pwmrate=6 a=0.04 d=0.1 s=1.0 r=0.1 gain=0.126 cutoff=900
+inst rattle wave=metal noiserate=3 a=0.002 d=0.03 s=0.0 r=0.02 gain=0.09 cutoff=3000
+n 0 hum 38 8 1.0
+n 0 rattle 60 1 0.8
+n 2 rattle 60 1 0.5
+n 4 rattle 60 1 0.8
+n 6 rattle 60 1 0.5
+length 8
+loop 0

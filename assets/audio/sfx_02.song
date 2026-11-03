@@ -1,0 +1,10 @@
+# sound effect 02: thief (original design)
+name thief
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst wah wave=saw a=0.01 d=0.15 s=0.7 r=0.12 gain=0.396 cutoff=600 fenv=2400 fdecay=0.12 vib=0.2 vibrate=7 vibdelay=0.08
+n 0 wah 67 4 0.9
+n 5 wah 64 4 0.9
+n 10 wah 60 10 1.0 to=58
+length 20

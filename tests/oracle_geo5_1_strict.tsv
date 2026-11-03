@@ -1,0 +1,11 @@
+# geo5-1 (strict conversion) - outcomes on the ORIGINAL cartridge, levels injected (doc 09 §7)
+# level	tws_ticks	outcome	tick
+1	1741	stall	
+2	2385	death	114
+3	4567	death	4046
+4	2181	death	50
+5	1407	win	1406
+6	3388	stall	
+7	6868	stall	
+8	2965	death	220
+9	1609	crash	986

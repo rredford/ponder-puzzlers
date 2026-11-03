@@ -1,0 +1,12 @@
+# sound effect 09: death (original design)
+name death
+tempo 600
+tpb 4
+echo 0.5 0.2
+inst fall wave=pulse duty=0.5 a=0.002 d=0.2 s=0.5 r=0.1 gain=0.22 cutoff=3000 vib=0.3 vibrate=9 vibdelay=0.0
+inst crash wave=noise noiserate=20 a=0.002 d=0.5 s=0.0 r=0.05 gain=0.3 cutoff=2500 fenv=4000 fdecay=0.15 verb=0.3
+n 0 fall 72 3 1.0 to=68
+n 3 fall 66 3 1.0 to=62
+n 6 fall 60 8 1.0 to=40
+n 6 crash 60 12 1.0
+length 18
