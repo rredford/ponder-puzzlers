@@ -1,3 +1,5 @@
+# Made with LLM, beware of slop. I carefully ensured it works well, but be aware.
+
 # Ponder Puzzlers — a remake engine for the Atari Lynx *Chip's Challenge* cartridge
 
 Name chosen 2026-11-01 (formerly the working title "Chiplynx"). A native Linux (C++17 + SDL2) reimplementation written from the clean-room specification in `cleanroom-spec/` (project docs 00–10). **No ROM is needed:** it ships with an original 10-level set (*Pip's First Steps*), plays any standard `.dat`/`.ccl` level set (e.g. CCLP1), and can optionally read the levels straight from your own cartridge image. All graphics and audio are new (original art, newly composed music and effects); no ROM graphics, sound or code are used or shipped.
