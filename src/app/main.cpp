@@ -55,7 +55,8 @@ struct Options {
     std::string shot;             // screenshot path (headless test)
     int shotTicks = 0;
     std::string replay;           // TWS file to auto-play
-    std::string script;           // headless key script: e.g. "enter,enter,R40,U8"
+    std::string script;           // headless key script: FRAME:key,... (keys: up down left right space enter b backspace r)
+    std::string hacks;            // headless: "step", "helmet" or "step,helmet" (not saved)
     int mode = -1;                // -1 = saved setting, 0 = strict Lynx ROM, 1 = extended Lynx mode
     std::string uiTest;           // headless: open a menu/dialog for the screenshot
     bool nativeDialogs = true;    // use zenity/kdialog file dialogs when available
@@ -92,16 +93,58 @@ private:
     void saveSettings() const;
     static std::string settingsPath();
     // menus and dialogs (drawn over the whole window)
-    enum class Modal { None, Menu, LevelDialog, Browser, Message, Waiting };
-    enum Cmd { CmdLoadRom, CmdLoadPack, CmdQuit, CmdSelectLevel, CmdToggleMusic, CmdToggleSfx };
+    enum class Modal { None, Menu, LevelDialog, Browser, Message, Waiting, Inventory, Moves };
+    enum Cmd { CmdLoadRom, CmdLoadPack, CmdQuit, CmdSelectLevel, CmdToggleMusic, CmdToggleSfx, CmdToggleStep, CmdToggleHelmet, CmdInventory, CmdNextLevel, CmdPrevLevel, CmdShowMoves };
     struct MenuItem { const char* label; const char* keys; int cmd; };
     struct Menu { const char* title; std::vector<MenuItem> items; };
     std::vector<Menu> menus_ = {
         {"File", {{"Load ROM...", "Ctrl+Shift+O", CmdLoadRom}, {"Load Level Pack...", "Ctrl+O", CmdLoadPack},
                   {nullptr, nullptr, -1}, {"Quit", "Ctrl+Q", CmdQuit}}},
-        {"Level", {{"Select Level...", "Ctrl+G", CmdSelectLevel}}},
+        {"Level", {{"Select Level...", "Ctrl+G", CmdSelectLevel}, {"Next Level", "Ctrl+N", CmdNextLevel}, {"Previous Level", "Ctrl+P", CmdPrevLevel}, {nullptr, nullptr, -1}, {"Show Moves...", "Ctrl+M", CmdShowMoves}}},
         {"Options", {{"Music", "", CmdToggleMusic}, {"Sound Effects", "", CmdToggleSfx}}},
+        {"Hacks", {{"Step Mode", "", CmdToggleStep}, {"Helmet", "", CmdToggleHelmet}, {nullptr, nullptr, -1}, {"Edit Inventory...", "Ctrl+I", CmdInventory}}},
     };
+    bool isToggle(int cmd) const { return cmd == CmdToggleMusic || cmd == CmdToggleSfx || cmd == CmdToggleStep || cmd == CmdToggleHelmet; }
+    bool toggleOn(int cmd) const { return cmd == CmdToggleMusic ? musicOn_ : cmd == CmdToggleSfx ? sfxOn_ : cmd == CmdToggleStep ? stepMode_ : helmet_; }
+    // Hacks (never part of the Lynx rules): step mode runs the game only on key presses, a whole move at a time,
+    // with undo; the helmet makes Chip and monsters walls to each other.
+    bool stepMode_ = false, helmet_ = false;
+    enum StepKind { StepMove, StepTick, StepWait };
+    struct StepAction { StepKind kind; uint8_t dir; };
+    bool stepActive_ = false, stepQueued_ = false;
+    bool heldSpace_ = false, heldB_ = false;   // step mode: a held key keeps stepping
+    StepAction step_{StepTick, 0}, queued_{StepTick, 0};
+    int stepDone_ = 0, stepX_ = 0, stepY_ = 0; bool stepMoved_ = false;
+    struct Snapshot { std::unique_ptr<Game> game; Globals globals; int anim, attempts; std::vector<int> px, py; size_t moves; };
+    // Step Mode records the steps of the attempt in Tile World's letters: U D L R a move, '-' a tick of waiting
+    // (Space is one '-', B as many '-' as the ticks it ran); undo takes them back.
+    std::string moves_;
+    bool movesCopied_ = false;
+    std::vector<Snapshot> undo_;
+    static constexpr size_t kUndoMax = 5000;
+    void queueStep(StepKind k, uint8_t dir);
+    void beginStep();
+    void undoStep();
+    // Step mode plays Chip's death animation by itself, but only for a death the game has recorded, and for at most
+    // 60 ticks: off-map writes can leave slot 0 in a dying-looking state that never ends (the game then simply
+    // goes on, as it would without step mode).
+    int autoTicks_ = 0;
+    // Fake Chips (off-map glitches) can bring a dead Chip straight back to life: the death stays recorded but slot 0
+    // is a walking Chip again, so the animation only counts while slot 0 is really dying (or has just vanished).
+    bool chipDying() const {
+        if (!game_ || game_->dead() || game_->finished() || autoTicks_ >= 60 || game_->deathReason() == DeathReason::None) return false;
+        uint8_t s0 = game_->objState(0);
+        return (s0 & 0x40) || s0 == 0;
+    }
+    // inventory editor (hack): rows 0-3 key counts (0-255), rows 4-7 boots on/off; applied on OK
+    int inv_[8] = {}; int invRow_ = 0; bool invTyped_ = false; bool invEdited_ = false;
+    void openInventory();
+    void applyInventory();
+    void invAdjust(int row, int delta);
+    SDL_Rect invBox() const { return SDL_Rect{kScreenW / 2 - 190, kMenuH + 12, 380, 408}; }
+    SDL_Rect invRowRect(int r) const { SDL_Rect b = invBox(); return SDL_Rect{b.x + 16, b.y + 52 + r * 37, b.w - 32, 34}; }
+    void pushUndo();
+    void clearSteps() { stepActive_ = stepQueued_ = false; undo_.clear(); }
     // audio: newly composed music and effects played by our own synthesizer (src/audio)
     audio::Synth synth_{48000};
     std::map<std::string, audio::Song> songs_;
@@ -140,6 +183,7 @@ private:
     SDL_Rect dropRect(int m) const;
     std::string levelRanges() const;
     void acceptLevelDialog();
+    void cycleLevel(int dir);
     void openFile(int purpose);
     void browseTo(const std::string& dir);
     void browserActivate();
@@ -178,6 +222,7 @@ private:
     uint32_t replayTick_ = 0; bool replaying_ = false;
     std::vector<std::pair<int, std::string>> script_;  // (tick, action)
     int frameTicks_ = 0;
+    long gameTicks_ = 0;           // test log only
 };
 
 // ---------------------------------------------------------------- sprites
@@ -225,6 +270,8 @@ void App::startLevel(int n) {
     if (!L || L->endMarker) { screen_ = Screen::Ending; game_.reset(); return; }
     data_ = *L;
     game_ = std::make_unique<Game>(data_, globals_);
+    game_->setHelmet(helmet_);
+    clearSteps(); invEdited_ = false; autoTicks_ = 0; moves_.clear();
     prevX_.assign(game_->slots(), 0); prevY_.assign(game_->slots(), 0);
     for (int i = 0; i < game_->slots(); ++i) { prevX_[i] = game_->objX(i); prevY_[i] = game_->objY(i); }
     screen_ = Screen::Play; paused_ = false;
@@ -258,6 +305,8 @@ void App::onKey(SDL_Keycode k, bool down) {
         default: break;
     }
     if (bit && !replaying_) { if (down) held_ |= bit; else held_ &= ~bit; }
+    if (k == SDLK_SPACE) heldSpace_ = down;
+    if (k == SDLK_b) heldB_ = down;
     if (!down) return;
     bool confirm = (k == SDLK_RETURN || k == SDLK_SPACE || k == SDLK_KP_ENTER);
     switch (screen_) {
@@ -290,6 +339,12 @@ void App::onKey(SDL_Keycode k, bool down) {
             held_ = 0;
             break;
         }
+        if (stepMode_ && !replaying_ && !paused_) {
+            if (bit) { queueStep(StepMove, bit); break; }
+            if (k == SDLK_SPACE) { queueStep(StepTick, 0); break; }
+            if (k == SDLK_b) { queueStep(StepWait, 0); break; }
+            if (k == SDLK_BACKSPACE) { undoStep(); break; }
+        }
         if (k == SDLK_p || k == SDLK_PAUSE) { if (!game_->waiting() || paused_) paused_ = !paused_; }
         else if (k == SDLK_r || k == SDLK_BACKSPACE) { held_ = 0; startLevel(level_); }
         else if (k == SDLK_ESCAPE) { screen_ = Screen::Title; held_ = 0; }
@@ -303,12 +358,76 @@ void App::onKey(SDL_Keycode k, bool down) {
         }
         break;
     case Screen::Died:
+        if (stepMode_ && k == SDLK_BACKSPACE && !undo_.empty()) { undoStep(); break; }
         if (confirm) { held_ = 0; startLevel(level_); }
         break;
     case Screen::Ending:
         if (confirm || k == SDLK_ESCAPE) { screen_ = Screen::Title; level_ = 1; totalScore_ = 0; attempts_ = 0; }
         break;
     }
+}
+
+void App::queueStep(StepKind k, uint8_t dir) {
+    if (game_->dead() || game_->finished() || chipDying()) return;
+    queued_ = StepAction{k, dir}; stepQueued_ = true;   // one action is buffered while the previous one plays out
+}
+
+void App::pushUndo() {
+    Snapshot sn{std::make_unique<Game>(*game_), globals_, anim_, attempts_, prevX_, prevY_, moves_.size()};
+    undo_.push_back(std::move(sn));
+    if (undo_.size() > kUndoMax) undo_.erase(undo_.begin());
+}
+
+void App::openInventory() {
+    if (!game_ || screen_ != Screen::Play) { showMessage("Start a level to edit the inventory."); return; }
+    for (int k = 0; k < 4; ++k) inv_[k] = game_->key(k);
+    inv_[4] = game_->skates(); inv_[5] = game_->suction(); inv_[6] = game_->fireBoots(); inv_[7] = game_->flippers();
+    invRow_ = 0; invTyped_ = false;
+    modal_ = Modal::Inventory;
+}
+
+void App::invAdjust(int row, int delta) {
+    if (row >= 4) inv_[row] = !inv_[row];
+    else inv_[row] = std::clamp(inv_[row] + delta, 0, 255);
+    invTyped_ = false;
+}
+
+// The edit is one undo step in Step Mode.
+void App::applyInventory() {
+    modal_ = Modal::None;
+    if (!game_) return;
+    bool same = true;
+    for (int k = 0; k < 4; ++k) same = same && inv_[k] == game_->key(k);
+    same = same && bool(inv_[4]) == game_->skates() && bool(inv_[5]) == game_->suction() && bool(inv_[6]) == game_->fireBoots() && bool(inv_[7]) == game_->flippers();
+    if (same) return;
+    stepActive_ = stepQueued_ = false;
+    pushUndo();
+    for (int k = 0; k < 4; ++k) game_->setKey(k, static_cast<uint8_t>(inv_[k]));
+    for (int b = 0; b < 4; ++b) game_->setBoots(b, inv_[4 + b] != 0);
+    invEdited_ = true;
+}
+
+void App::beginStep() {
+    pushUndo();
+    stepActive_ = true; stepDone_ = 0; stepMoved_ = false; autoTicks_ = 0;
+    if (step_.kind == StepMove) moves_ += step_.dir == kN ? 'U' : step_.dir == kS ? 'D' : step_.dir == cc::kW ? 'L' : 'R';
+    stepX_ = game_->objX(0); stepY_ = game_->objY(0);
+}
+
+// Back to the state before the last step action: the whole game state is restored (map, objects, inventory,
+// clock, random generator), so drownings, pick-ups, clones and the rest all come undone.
+void App::undoStep() {
+    stepActive_ = stepQueued_ = false;
+    if (undo_.empty()) return;
+    Snapshot& sn = undo_.back();
+    globals_ = sn.globals;
+    game_ = std::make_unique<Game>(*sn.game);   // refers to globals_, like the original
+    game_->setHelmet(helmet_);
+    anim_ = sn.anim; attempts_ = sn.attempts; prevX_ = sn.px; prevY_ = sn.py; autoTicks_ = 0;
+    moves_.resize(std::min(moves_.size(), sn.moves));
+    undo_.pop_back();
+    screen_ = Screen::Play;
+    synth_.stopAllSfx(); loopHandle_ = 0; loopId_ = 0;
 }
 
 void App::update() {
@@ -323,18 +442,50 @@ void App::update() {
         in.dirs = it == replayInput_.end() ? 0 : it->second;
         in.ab = replayTick_ == 0;     // Tile World starts the level at tick 0 even if the first move comes later
         ++replayTick_;
+    } else if (stepMode_) {
+        if (!stepActive_ && chipDying()) {
+            ++autoTicks_;   // Chip's death animation plays out on its own (Backspace afterwards undoes the fatal step)
+        } else {
+            if (!stepActive_) {
+                if (!stepQueued_) { abPressed_ = false; --anim_; return; }   // step mode: the game (and the tile animation) waits for the next key
+                step_ = queued_; stepQueued_ = false; beginStep();
+            }
+            // a move holds its direction until Chip has started moving (as holding the key would), then lets go
+            in.dirs = step_.kind == StepMove && !stepMoved_ ? step_.dir : 0;
+            in.ab = step_.kind != StepMove && game_->waiting();   // Space / B start the level without moving
+        }
     } else {
         in.dirs = held_;
         in.ab = abPressed_;
     }
     abPressed_ = false;
     bool wasWaiting = game_->waiting();
-    game_->tick(in);
+    game_->tick(in); ++gameTicks_;
     if (sfxOn_) {
         char nm[16];
         for (uint8_t id : game_->sounds()) {
             std::snprintf(nm, sizeof nm, "sfx_%02X", id); synth_.playSfx(song(nm));
             if (std::getenv("PONDER_AUDIO_LOG")) std::fprintf(stderr, "sfx %02X\n", id);
+        }
+    }
+    if (stepActive_) {
+        ++stepDone_;
+        if (game_->objX(0) != stepX_ || game_->objY(0) != stepY_) stepMoved_ = true;
+        // a move (or B) lasts one full move: 4 ticks, then on until Chip stands on a cell (sliding can leave him
+        // between cells); Space is a single tick
+        bool onCell = (game_->objX(0) & 7) == 0 && (game_->objY(0) & 7) == 0;
+        int need = step_.kind == StepTick ? 1 : 4;
+        if ((stepDone_ >= need && (onCell || step_.kind == StepTick)) || stepDone_ >= need + 12 || game_->dead() || game_->finished()) {
+            stepActive_ = false;
+            if (step_.kind != StepMove) moves_.append(static_cast<size_t>(stepDone_), '-');
+            // a key still held at the end of a step starts the next one, so holding plays at normal speed and
+            // letting go stops at the end of the move
+            if (!stepQueued_) {
+                uint8_t d = held_ & step_.dir ? step_.dir : held_ & kN ? kN : held_ & kE ? kE : held_ & kS ? kS : held_ & cc::kW ? cc::kW : 0;
+                if (d) queueStep(StepMove, d);
+                else if (heldB_) queueStep(StepWait, 0);
+                else if (heldSpace_) queueStep(StepTick, 0);
+            }
         }
     }
     if (wasWaiting && !game_->waiting()) { if (attempts_ < 127) ++attempts_; }
@@ -414,8 +565,20 @@ void App::drawHud() {
         }
         if (have[k]) assets_.draw(ren_, boots[k], x, inv.y + 56, 44);
     }
-    ui::text(ren_, assets_, false, "P pause  R restart", cx, 380, SDL_Color{120, 128, 160, 255}, ui::Center, false);
-    ui::text(ren_, assets_, false, "ESC menu", cx, 402, SDL_Color{120, 128, 160, 255}, ui::Center, false);
+    const SDL_Color dim{120, 128, 160, 255}, hack{255, 170, 90, 255};
+    if (stepMode_ || helmet_ || invEdited_) {
+        std::string h;
+        for (auto [on, name] : {std::pair{stepMode_, "STEP"}, std::pair{helmet_, "HELMET"}, std::pair{invEdited_, "INV"}})
+            if (on) h += (h.empty() ? "HACK: " : "+") + std::string(name);
+        ui::text(ren_, assets_, false, h.c_str(), cx, 362, hack, ui::Center, false);
+    }
+    if (stepMode_) {
+        ui::text(ren_, assets_, false, "Space tick  B wait", cx, 384, dim, ui::Center, false);
+        ui::text(ren_, assets_, false, "Bksp undo  R restart", cx, 406, dim, ui::Center, false);
+    } else {
+        ui::text(ren_, assets_, false, "P pause  R restart", cx, 384, dim, ui::Center, false);
+        ui::text(ren_, assets_, false, "ESC menu", cx, 406, dim, ui::Center, false);
+    }
 }
 
 // Strict mode: an edge case has reached cartridge memory or behaviour the remake does not reproduce exactly
@@ -497,7 +660,7 @@ void App::drawOverlay() {
         bool crash = game_->deathReason() == DeathReason::Crash;
         ui::text(ren_, assets_, true, timeout ? "Time's up!" : crash ? "Cartridge crash!" : "Ouch!", mid, b.y + 18, kRed, ui::Center);
         if (crash) ui::text(ren_, assets_, false, "The original game would crash here", mid, b.y + 52, kWhite, ui::Center);
-        ui::text(ren_, assets_, false, "Press Enter to try again", mid, b.y + 78, kWhite, ui::Center);
+        ui::text(ren_, assets_, false, stepMode_ && !undo_.empty() ? "Enter: try again   Bksp: undo" : "Press Enter to try again", mid, b.y + 78, kWhite, ui::Center);
         return;
     }
     if (screen_ == Screen::LevelDone) {
@@ -744,8 +907,8 @@ void App::drawModal() {
             }
             if (k == menuHover_) { SDL_SetRenderDrawColor(ren_, kHover.r, kHover.g, kHover.b, 255); SDL_RenderFillRect(ren_, &r); }
             int lx = r.x + 10;
-            if (it.cmd == CmdToggleMusic || it.cmd == CmdToggleSfx) {
-                bool on = it.cmd == CmdToggleMusic ? musicOn_ : sfxOn_;
+            if (isToggle(it.cmd)) {
+                bool on = toggleOn(it.cmd);
                 SDL_Rect box{r.x + 8, r.y + 5, 15, 15};
                 ui::panel(ren_, box, SDL_Color{34, 38, 62, 255}, on ? kYellow : kBarLine);
                 if (on) {
@@ -773,6 +936,66 @@ void App::drawModal() {
         if (!dialogError_.empty()) ui::text(ren_, assets_, false, dialogError_, mid, b.y + 126, kRed, ui::Center, false);
         button(SDL_Rect{mid - 120, b.y + 150, 110, 30}, "OK", true);
         button(SDL_Rect{mid + 10, b.y + 150, 110, 30}, "Cancel", false);
+        return;
+    }
+    case Modal::Moves: {
+        dim();
+        SDL_Rect b{mid - 280, kMenuH + 40, 560, 350};
+        ui::panel(ren_, b, kDialogFill, kYellow);
+        char head[64]; std::snprintf(head, sizeof head, "Moves (%zu)", moves_.size());
+        ui::text(ren_, assets_, true, head, mid, b.y + 8, kYellow, ui::Center);
+        if (moves_.empty()) {
+            ui::text(ren_, assets_, false, stepMode_ ? "No steps yet this attempt." : "Moves are recorded in Step Mode (Hacks menu).", mid, b.y + 120, kGrey, ui::Center, false);
+        } else {
+            // groups of 10 for easier counting, wrapped to the box; the newest lines are shown if it is long
+            std::vector<std::string> lines; std::string cur;
+            for (size_t i = 0; i < moves_.size(); i += 10) {
+                std::string grp = moves_.substr(i, 10);
+                if (!cur.empty() && ui::textWidth(assets_, false, cur + " " + grp) > b.w - 40) { lines.push_back(cur); cur.clear(); }
+                cur += (cur.empty() ? "" : " ") + grp;
+            }
+            if (!cur.empty()) lines.push_back(cur);
+            const size_t maxLines = 9;
+            size_t first = lines.size() > maxLines ? lines.size() - maxLines : 0;
+            if (first) ui::text(ren_, assets_, false, "... (" + std::to_string(first) + " earlier lines; Copy takes all)", mid, b.y + 50, kGrey, ui::Center, false);
+            for (size_t k = first; k < lines.size(); ++k)
+                ui::text(ren_, assets_, false, lines[k], b.x + 20, b.y + 72 + int(k - first) * 24, kWhite, ui::Left, false);
+        }
+        ui::text(ren_, assets_, false, "U D L R move   - wait a tick", mid, b.y + b.h - 76, kGrey, ui::Center, false);
+        button(SDL_Rect{mid - 120, b.y + b.h - 44, 110, 30}, movesCopied_ ? "Copied" : "Copy", true);
+        button(SDL_Rect{mid + 10, b.y + b.h - 44, 110, 30}, "Close", false);
+        return;
+    }
+    case Modal::Inventory: {
+        dim();
+        SDL_Rect b = invBox();
+        ui::panel(ren_, b, kDialogFill, kYellow);
+        ui::text(ren_, assets_, true, "Inventory", mid, b.y + 8, kYellow, ui::Center);
+        static const char* names[8] = {"Red keys", "Blue keys", "Yellow keys", "Green keys", "Ice skates", "Suction boots", "Fire boots", "Flippers"};
+        static const char* icons[8] = {"tile_1E", "tile_1F", "tile_20", "tile_21", "tile_0F", "tile_11", "tile_10", "tile_12"};
+        for (int r = 0; r < 8; ++r) {
+            SDL_Rect rr = invRowRect(r);
+            if (r == invRow_) { SDL_SetRenderDrawColor(ren_, kHover.r, kHover.g, kHover.b, 255); SDL_RenderFillRect(ren_, &rr); }
+            assets_.draw(ren_, "tile_00", rr.x + 2, rr.y + 1, 32);
+            assets_.draw(ren_, icons[r], rr.x + 2, rr.y + 1, 32);
+            ui::text(ren_, assets_, false, names[r], rr.x + 44, rr.y + 5, kWhite, ui::Left, false);
+            if (r < 4) {
+                char buf[8]; std::snprintf(buf, sizeof buf, "%d", inv_[r]);
+                ui::text(ren_, assets_, false, "<", rr.x + rr.w - 130, rr.y + 5, kCyan, ui::Center, false);
+                ui::text(ren_, assets_, false, buf, rr.x + rr.w - 75, rr.y + 5, kYellow, ui::Center, false);
+                ui::text(ren_, assets_, false, ">", rr.x + rr.w - 20, rr.y + 5, kCyan, ui::Center, false);
+            } else {
+                SDL_Rect box{rr.x + rr.w - 34, rr.y + 8, 18, 18};
+                ui::panel(ren_, box, SDL_Color{34, 38, 62, 255}, inv_[r] ? kYellow : kBarLine);
+                if (inv_[r]) {
+                    SDL_SetRenderDrawColor(ren_, 255, 214, 64, 255);
+                    SDL_RenderDrawLine(ren_, box.x + 4, box.y + 9, box.x + 7, box.y + 13);
+                    SDL_RenderDrawLine(ren_, box.x + 7, box.y + 13, box.x + 14, box.y + 4);
+                }
+            }
+        }
+        button(SDL_Rect{mid - 120, b.y + b.h - 44, 110, 30}, "OK", true);
+        button(SDL_Rect{mid + 10, b.y + b.h - 44, 110, 30}, "Cancel", false);
         return;
     }
     case Modal::Waiting: {
@@ -998,6 +1221,21 @@ void App::browserActivate() {
     if (browserPurpose_ == CmdLoadRom) loadRomFile(path); else loadPackFile(path);
 }
 
+// Ctrl+N / Ctrl+P: next / previous playable level, wrapping around (skips gaps and the cartridge end marker).
+void App::cycleLevel(int dir) {
+    int n = maxLevel(); if (n <= 0) return;
+    int cur = level_;
+    for (int k = 1; k <= n; ++k) {
+        int c = ((cur - 1 + dir * k) % n + n) % n + 1;
+        const LevelData* L = set_.find(c);
+        if (L && !L->endMarker) {
+            replaying_ = false; attempts_ = 0; skipCounter_ = 10; held_ = 0;
+            startLevel(c);
+            return;
+        }
+    }
+}
+
 void App::acceptLevelDialog() {
     if (levelInput_.empty()) { dialogError_ = "Type a level number"; return; }
     int n = std::atoi(levelInput_.c_str());
@@ -1021,6 +1259,12 @@ void App::runCommand(int cmd) {
         break;
     case CmdToggleMusic: musicOn_ = !musicOn_; restartMusic_ = true; saveSettings(); break;
     case CmdToggleSfx: sfxOn_ = !sfxOn_; if (!sfxOn_) { synth_.stopAllSfx(); loopHandle_ = 0; loopId_ = 0; } saveSettings(); break;
+    case CmdToggleStep: stepMode_ = !stepMode_; stepActive_ = stepQueued_ = false; held_ = 0; heldSpace_ = heldB_ = false; saveSettings(); break;   // undo history is kept
+    case CmdToggleHelmet: helmet_ = !helmet_; if (game_) game_->setHelmet(helmet_); saveSettings(); break;
+    case CmdInventory: openInventory(); break;
+    case CmdNextLevel: cycleLevel(+1); break;
+    case CmdPrevLevel: cycleLevel(-1); break;
+    case CmdShowMoves: movesCopied_ = false; modal_ = Modal::Moves; break;
     }
 }
 
@@ -1031,6 +1275,9 @@ bool App::onModalKey(SDL_Keycode k, Uint16 mod) {
         if (ctrl && k == SDLK_o) { runCommand(shift ? CmdLoadRom : CmdLoadPack); return true; }
         if (ctrl && k == SDLK_q) { runCommand(CmdQuit); return true; }
         if (ctrl && k == SDLK_g) { runCommand(CmdSelectLevel); return true; }
+        if (ctrl && k == SDLK_i) { runCommand(CmdInventory); return true; }
+        if (ctrl && (k == SDLK_p || k == SDLK_n)) { cycleLevel(k == SDLK_n ? +1 : -1); return true; }
+        if (ctrl && k == SDLK_m) { runCommand(CmdShowMoves); return true; }
         if (k == SDLK_F10) { modal_ = Modal::Menu; menuOpen_ = 0; menuHover_ = 0; return true; }
         return false;
     }
@@ -1062,6 +1309,28 @@ bool App::onModalKey(SDL_Keycode k, Uint16 mod) {
     case Modal::Message:
         if (confirm || k == SDLK_ESCAPE || k == SDLK_SPACE) modal_ = Modal::None;
         return true;
+    case Modal::Moves:
+        if (k == SDLK_ESCAPE || confirm || k == SDLK_SPACE) modal_ = Modal::None;
+        else if (k == SDLK_c) { SDL_SetClipboardText(moves_.c_str()); movesCopied_ = true; }
+        return true;
+    case Modal::Inventory: {
+        int digit = (k >= SDLK_0 && k <= SDLK_9) ? int(k - SDLK_0) : (k >= SDLK_KP_1 && k <= SDLK_KP_9) ? int(k - SDLK_KP_1 + 1) : k == SDLK_KP_0 ? 0 : -1;
+        if (k == SDLK_ESCAPE) modal_ = Modal::None;
+        else if (confirm) applyInventory();
+        else if (k == SDLK_UP) { invRow_ = (invRow_ + 7) % 8; invTyped_ = false; }
+        else if (k == SDLK_DOWN || k == SDLK_TAB) { invRow_ = (invRow_ + 1) % 8; invTyped_ = false; }
+        else if (k == SDLK_LEFT) invAdjust(invRow_, -1);
+        else if (k == SDLK_RIGHT) invAdjust(invRow_, +1);
+        else if (k == SDLK_PAGEDOWN) invAdjust(invRow_, -10);
+        else if (k == SDLK_PAGEUP) invAdjust(invRow_, +10);
+        else if (k == SDLK_SPACE && invRow_ >= 4) invAdjust(invRow_, 0);
+        else if (k == SDLK_BACKSPACE && invRow_ < 4) { inv_[invRow_] /= 10; invTyped_ = true; }
+        else if (digit >= 0 && invRow_ < 4) {   // typing a number replaces the count
+            int v = invTyped_ ? inv_[invRow_] * 10 + digit : digit;
+            inv_[invRow_] = std::min(v, 255); invTyped_ = true;
+        }
+        return true;
+    }
     case Modal::Waiting:
         if (k == SDLK_ESCAPE) cancelNativeDialog();
         return true;
@@ -1139,6 +1408,29 @@ void App::onMouse(const SDL_Event& e) {
     case Modal::Message:
         if (e.type == SDL_MOUSEBUTTONDOWN && in(SDL_Rect{mid - 55, kMenuH + 140 + 90, 110, 30})) modal_ = Modal::None;
         return;
+    case Modal::Moves: {
+        if (e.type != SDL_MOUSEBUTTONDOWN) return;
+        SDL_Rect b{mid - 280, kMenuH + 40, 560, 350};
+        if (in(SDL_Rect{mid - 120, b.y + b.h - 44, 110, 30})) { SDL_SetClipboardText(moves_.c_str()); movesCopied_ = true; }
+        else if (in(SDL_Rect{mid + 10, b.y + b.h - 44, 110, 30})) modal_ = Modal::None;
+        return;
+    }
+    case Modal::Inventory: {
+        if (e.type != SDL_MOUSEBUTTONDOWN) return;
+        SDL_Rect b = invBox();
+        for (int r = 0; r < 8; ++r) {
+            SDL_Rect rr = invRowRect(r);
+            if (!in(rr)) continue;
+            invRow_ = r; invTyped_ = false;
+            if (r >= 4) invAdjust(r, 0);
+            else if (in(SDL_Rect{rr.x + rr.w - 150, rr.y, 40, rr.h})) invAdjust(r, -1);
+            else if (in(SDL_Rect{rr.x + rr.w - 40, rr.y, 40, rr.h})) invAdjust(r, +1);
+            return;
+        }
+        if (in(SDL_Rect{mid - 120, b.y + b.h - 44, 110, 30})) applyInventory();
+        else if (in(SDL_Rect{mid + 10, b.y + b.h - 44, 110, 30})) modal_ = Modal::None;
+        return;
+    }
     case Modal::Browser: {
         if (e.type != SDL_MOUSEBUTTONDOWN) return;
         SDL_Rect b{30, kMenuH + 14, kScreenW - 60, kScreenH - 28};
@@ -1192,6 +1484,8 @@ void App::loadSettings() {
         else if (line.rfind("lastdir=", 0) == 0) lastDir_ = line.substr(8);
         else if (line == "music=0") musicOn_ = false;
         else if (line == "sfx=0") sfxOn_ = false;
+        else if (line == "stepmode=1") stepMode_ = true;
+        else if (line == "helmet=1") helmet_ = true;
     }
 }
 
@@ -1200,7 +1494,8 @@ void App::saveSettings() const {
     std::filesystem::create_directories(std::filesystem::path(settingsPath()).parent_path(), ec);
     std::ofstream f(settingsPath());
     if (f) f << "mode=" << (extended_ ? "extended" : "strict") << "\n" << "lastdir=" << lastDir_ << "\n"
-               << "music=" << (musicOn_ ? 1 : 0) << "\n" << "sfx=" << (sfxOn_ ? 1 : 0) << "\n";
+               << "music=" << (musicOn_ ? 1 : 0) << "\n" << "sfx=" << (sfxOn_ ? 1 : 0) << "\n"
+               << "stepmode=" << (stepMode_ ? 1 : 0) << "\n" << "helmet=" << (helmet_ ? 1 : 0) << "\n";
 }
 
 void App::loadSet() {
@@ -1264,10 +1559,24 @@ int App::run() {
     if (!assets_.load(ren_, opt_.assets)) { std::fprintf(stderr, "Could not load assets from %s\n", opt_.assets.c_str()); return 1; }
     if (!headless) initAudio();
 
+    if (!opt_.hacks.empty()) { stepMode_ = opt_.hacks.find("step") != std::string::npos; helmet_ = opt_.hacks.find("helmet") != std::string::npos; }
     if (opt_.level > 0) { level_ = opt_.level; startLevel(level_); }
+    {   // headless key script
+        static const std::map<std::string, SDL_Keycode> kKeys = {{"up", SDLK_UP}, {"down", SDLK_DOWN}, {"left", SDLK_LEFT},
+            {"right", SDLK_RIGHT}, {"space", SDLK_SPACE}, {"enter", SDLK_RETURN}, {"b", SDLK_b}, {"backspace", SDLK_BACKSPACE}, {"r", SDLK_r}};
+        std::stringstream ss(opt_.script); std::string item;
+        while (std::getline(ss, item, ',')) {
+            auto c = item.find(':'); if (c == std::string::npos) continue;
+            std::string key = item.substr(c + 1), name = (key[0] == '+' || key[0] == '-') ? key.substr(1) : key;   // +key down, -key up
+            if (kKeys.count(name)) script_.push_back({std::stoi(item.substr(0, c)), key});
+        }
+    }
     if (!opt_.uiTest.empty()) {                    // headless screenshots of the menus and dialogs
         if (opt_.uiTest == "menu-file") { modal_ = Modal::Menu; menuOpen_ = 0; menuHover_ = 1; }
         else if (opt_.uiTest == "menu-level") { modal_ = Modal::Menu; menuOpen_ = 1; menuHover_ = 0; }
+        else if (opt_.uiTest == "menu-hacks") { modal_ = Modal::Menu; menuOpen_ = 3; menuHover_ = 1; }
+        else if (opt_.uiTest == "next" || opt_.uiTest == "prev") cycleLevel(opt_.uiTest == "next" ? +1 : -1);
+        else if (opt_.uiTest == "inventory") { openInventory(); inv_[0] = 3; inv_[6] = 1; invRow_ = 6; }
         else if (opt_.uiTest == "level-dialog") { runCommand(CmdSelectLevel); levelInput_ = "12"; }
         else if (opt_.uiTest == "level-error") { runCommand(CmdSelectLevel); levelInput_ = "145"; acceptLevelDialog(); }
         else if (opt_.uiTest == "browser") { opt_.nativeDialogs = false; openFile(CmdLoadPack); }
@@ -1310,8 +1619,21 @@ int App::run() {
         updateAudio();
         if (quit_) quit = true;
         if (headless) {
+            for (auto& [f, key] : script_) if (f == frameTicks_) {
+                static const std::map<std::string, SDL_Keycode> kKeys = {{"up", SDLK_UP}, {"down", SDLK_DOWN}, {"left", SDLK_LEFT},
+                    {"right", SDLK_RIGHT}, {"space", SDLK_SPACE}, {"enter", SDLK_RETURN}, {"b", SDLK_b}, {"backspace", SDLK_BACKSPACE}, {"r", SDLK_r}};
+                bool dn = key[0] != '-', up = key[0] != '+';
+                SDL_Keycode kc = kKeys.at(up && dn ? key : key.substr(1));
+                if (dn) onKey(kc, true);
+                if (up) onKey(kc, false);
+            }
             update();
+            if (std::getenv("PONDER_STEP_LOG") && game_)
+                std::fprintf(stderr, "F %d x %d y %d state %02x time %d screen %d undo %zu level %d\n", frameTicks_, game_->objX(0), game_->objY(0),
+                             game_->objState(0), game_->timeLeft(), int(screen_), undo_.size(), level_);
             if (++frameTicks_ >= opt_.shotTicks) {
+                if (opt_.uiTest == "moves") modal_ = Modal::Moves;
+                if (std::getenv("PONDER_STEP_LOG")) std::fprintf(stderr, "MOVES %s\nTICKS %ld\n", moves_.c_str(), gameTicks_);
                 render(1.0);
                 SDL_Surface* s = SDL_CreateRGBSurfaceWithFormat(0, kScreenW * opt_.scale, kWinH * opt_.scale, 32, SDL_PIXELFORMAT_ARGB8888);
                 SDL_RenderReadPixels(ren_, nullptr, SDL_PIXELFORMAT_ARGB8888, s->pixels, s->pitch);
@@ -1351,6 +1673,8 @@ int main(int argc, char** argv) {
         else if (a == "--strict") o.mode = 0;
         else if (a == "--extended") o.mode = 1;
         else if (a == "--ui-test") o.uiTest = next();
+        else if (a == "--script") o.script = next();
+        else if (a == "--hacks") o.hacks = next();
         else if (a == "--no-native-dialogs") o.nativeDialogs = false;
         else if (a == "--help" || a == "-h") {
             std::printf("ponderpuzzlers [--levels set.dat | --rom cartridge.lnx] [--strict | --extended] [--level N]\n"

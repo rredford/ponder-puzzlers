@@ -593,6 +593,20 @@ What the original does: the released copy steps into the RAM beyond the edge and
 
 So a monster in slot 0 cannot collect chips or boots, or walk onto the exit; it does collect the keys it can walk onto. Starting on the exit is different: whatever is in slot 0 wins on the first tick if it is still standing there (a block; a tank walled in), while a free monster has already moved off (tank, glider, bug, fireball, teeth: no win). All in sync with the remake.
 
+**Monsters and blocks meeting slot 0** (`tools/measure/slot0collide.py`; 2026-11-02): a glider in slot 0 and a glider in slot 1 head-on in horizontal and vertical corridors with gaps 0–5, a slot-1 glider chasing slot 0 into a dead end, a slot-0 block hit by a glider, a slot-0 glider meeting a block, and 150 random open rooms with two gliders and up to two other monsters or blocks; no joystick input, 60 ticks. **All 178 in sync.** What happens:
+
+| Meeting | Result |
+|---|---|
+| Glider (slot 1) and slot-0 glider, either one moving into the other, including both heading for the same empty cell | Both objects turn into a dying effect (states 46–4B, two ticks per frame) on their own cells and are removed (state 0); the level ends as a death, as if Chip had been caught. |
+| Glider (slot 1) moving into a slot-0 **block** | The same: the block "dies" like Chip and takes the glider with it; level over. A monster normally cannot touch a block at all. |
+| Slot-0 glider moving into a block (slot 1) | The block is pushed one cell, as Chip pushes it, but the glider does not follow: it stays put that tick and then turns as a blocked glider (here: back), so it can push the block again on its next pass. No death. |
+
+**No Chip in the level** (`tools/measure/nochip.py`; 2026-11-08): slot 0 empty (state 0, position (0,0)), a monster (glider, tank, ball) or block in slot 1 on row 0, a bomb or floor at (0,0); started with A, with one direction key, or with a key held; and a Chip-type object in slot 1 or 2 with slot 0 empty. 29 runs, **all in sync**.
+
+- **No Chip-type object anywhere:** either start (A or a direction key) starts the level; with no input at all nothing moves. The level start turns slot 0 to face south, so it becomes a "moving nothing" (state 02) at (0,0) that never moves; the joystick does nothing. A monster walking onto (0,0) is not killed and does not end the level. A bomb at (0,0) is not set off by slot 0; the first monster to reach it explodes and the bomb is gone (floor), unlike MSCC, where the absent Chip keeps the bomb in place. The level never ends.
+- **A Chip-type object in another slot** (a fake Chip): its decision runs Chip's code, which acts on slot 0, so slot 0 is turned into a Chip (state 05/85) at (0,0) that follows the joystick, while the fake Chip itself never moves. If that Chip walks into a bomb it dies (state 40) and the bomb is gone, but on the next tick the fake Chip's decision turns slot 0 back into a moving Chip, which walks on: the level does not end.
+- **Seen in play (2026-11-08, remake only):** CC1 level 144 with the helmet hack and fire boots. Fireballs redirected by the helmet wrapped over the map edge; three ended in the top-left corner as Chip-type objects (fake Chips), and the bottom border wall at (29,31) became floor. When Chip later walked into a fireball, the death was recorded and both started dying, but the fake Chips' decisions turned slot 0 back into a walking Chip on the next tick: the game plays on with a death recorded that never completes. The remake showed no desync notice. (This exposed two Step Mode bugs, since fixed: it auto-ran the "death animation" whenever a death was recorded.)
+
 ## 25. Ghost references (an object reference with no object there)
 
 `tools/measure/ghost.py SEED 100` (seeds 1–4): one map cell of the level data holds `80 | k`, where slot k is empty, a live object elsewhere (any type), a dying effect elsewhere, Chip (elsewhere), or the mover itself. Movers heading into it: Chip with random input, every monster type, a block Chip pushes, objects sliding on ice or carried by a force floor; 80 ticks, A start. 400 runs.

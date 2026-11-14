@@ -130,6 +130,13 @@ public:
     void drawPass();                   // strict mode: what drawing odd tile codes writes (doc 04 §4.4)
     // Test hook: write a byte into the modelled RAM (see peek/poke in engine.cpp), as an experiment would.
     void debugPoke(int addr, uint8_t v) { poke(addr, v); }
+    // Hack (front-end option, never used for verification): a monster or block moving into Chip is blocked as by a
+    // wall instead of killing him. Chip walking into a monster still dies.
+    void setHelmet(bool on) { helmet_ = on; }
+    // Hack: edit Chip's inventory (keys 0 red, 1 blue, 2 yellow, 3 green; boots 0 skates, 1 suction, 2 fire, 3 flippers).
+    void setKey(int k, uint8_t n) { keys_[k & 3] = n; }
+    void setBoots(int b, bool on) { (b == 0 ? skates_ : b == 1 ? suction_ : b == 2 ? fire_ : flippers_) = on; }
+    bool helmet() const { return helmet_; }
     void debugNoDraw() { noDraw_ = true; }   // test switch: leave out the drawing effects (for comparison)
     uint8_t debugPeek(int addr) const { return peek(addr); }
 
@@ -209,6 +216,7 @@ private:
     uint32_t frames_ = 0;
     uint8_t rowLo_[32] = {};   // row table of the cell lookup (initialised to row * 32 in the constructor)
     bool noDraw_ = false;
+    bool helmet_ = false;
     std::array<bool, 1024> linkDrawn_{};   // link entries overwritten by drawing this level
     void checkDrawnLink(int c, int A) const;     // tick() calls since the level started (the 6-tick animation cycle)
     std::array<Cell, kMapCells> map_;

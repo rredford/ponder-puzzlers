@@ -4,6 +4,7 @@
 //   levelpack info set.dat                  list levels
 //   levelpack verify set.dat sol.tws oracle.tsv   replay solutions against an outcome table
 //   levelpack check set.dat moves.txt       run move scripts (one line per level: "N: UULLRR..") and require wins
+//   levelpack steps set.dat N MOVES         replay a Step Mode move list (Show Moves dialog) on level N; MOVES or @file; [--helmet] [--boots=ksfw] (skates suction fire flippers)
 //   levelpack replay set.dat sol.tws        outcome of every solution (oracle TSV format)
 //   levelpack lynx set.dat dir              write cartridge-format level files (strict mode) for testing
 //   levelpack links set.dat                 buttons whose DAT wiring differs from the cartridge rule
@@ -60,6 +61,46 @@ static std::string playScript(const LevelData& L, const std::string& moves, long
         if (!o.empty()) { *ticks = t; return o; }
     }
     for (int k = 0; k < 40; ++k) { tick(0); long at; std::string o = outcomeOf(game, t, &at); if (!o.empty()) { *ticks = t; return o; } }
+    *ticks = t;
+    return "stuck";
+}
+
+// Replays a Step Mode move list (Hacks menu, Level -> Show Moves) with the same timing as the game: U/D/L/R = one move (the direction is held until Chip starts moving,
+// for at most 4 ticks; the step lasts 4 ticks and then on until Chip stands on a cell, at most 12 more);
+// '-' = wait one tick (as in Tile World; the game writes B as the ticks it ran); '.' = wait one move (4 ticks,
+// same ending rule as a move). A wait at the start starts the level
+// without moving (A button). Other characters are ignored. Returns "win"/"death"/"time-out"/"stuck".
+static std::string playSteps(const LevelData& L, const std::string& moves, long* ticks, bool helmet = false, const std::string& boots = "") {
+    Globals g;
+    Game game(L, g);
+    game.setHelmet(helmet);
+    for (char b : boots) { int k = std::string("ksfw").find(b); if (k >= 0 && k < 4) game.setBoots(k, true); }   // skates suction fire water(flippers)
+    const bool trace = std::getenv("CC_STEP_TRACE") != nullptr;
+    size_t idx = 0;
+    long t = 0;
+    auto over = [&]() { return game.finished() || game.dead(); };
+    for (char ch : moves) {
+        uint8_t d = ch == 'U' ? kN : ch == 'D' ? kS : ch == 'L' ? kW : ch == 'R' ? kE : 0;
+        if (!d && ch != '.' && ch != '-') continue;
+        // a death in progress ends the list (but fake Chips can revive Chip at once: then play on, as the game does)
+        if (over() || (game.deathReason() != DeathReason::None && ((game.objState(0) & 0x40) || game.objState(0) == 0))) break;
+        const int need = ch == '-' ? 1 : 4;
+        const int sx = game.objX(0), sy = game.objY(0);
+        bool moved = false;
+        for (int done = 0;;) {
+            Input in; in.dirs = d && !moved ? d : 0; in.ab = !d && game.waiting();
+            game.tick(in); ++t; ++done;
+            if (game.objX(0) != sx || game.objY(0) != sy) moved = true;
+            bool onCell = ((game.objX(0) | game.objY(0)) & 7) == 0;
+            if ((done >= need && (onCell || ch == '-')) || done >= need + 12 || over()) break;
+        }
+        if (trace) std::printf("%5zu %c t%-5ld chip (%d,%d)%s state %02x under %02x time %d%s\n", idx, ch, t, game.objX(0) / 8, game.objY(0) / 8,
+                               ((game.objX(0) | game.objY(0)) & 7) ? "+" : " ", game.objState(0), game.objUnder(0), game.timeLeft(), game.outOfSync() ? " DESYNC" : "");
+        ++idx;
+        long at; std::string o = outcomeOf(game, t, &at);
+        if (!o.empty()) { *ticks = t; return o; }
+    }
+    for (int k = 0; k < 60; ++k) { Input in; game.tick(in); ++t; long at; std::string o = outcomeOf(game, t, &at); if (!o.empty()) { *ticks = t; return o; } }
     *ticks = t;
     return "stuck";
 }
@@ -308,6 +349,17 @@ int main(int argc, char** argv) {
             }
             std::printf("links: %d button(s) wired differently from the Lynx rule\n", differ);
             return 0;
+        }
+        if (cmd == "steps" && argc >= 5) {
+            const LevelData* L = set.find(std::atoi(argv[3]));
+            if (!L) { std::fprintf(stderr, "no level %s\n", argv[3]); return 1; }
+            std::string mv = argv[4];
+            if (!mv.empty() && mv[0] == '@') { std::ifstream f(mv.substr(1)); std::stringstream ss; ss << f.rdbuf(); mv = ss.str(); }
+            bool helmet = false; std::string boots;
+            for (int a = 5; a < argc; ++a) { std::string o = argv[a]; if (o == "--helmet") helmet = true; else if (o.rfind("--boots=", 0) == 0) boots = o.substr(8); }
+            long t = 0; std::string o = playSteps(*L, mv, &t, helmet, boots);
+            std::printf("level %d: %s after %ld ticks\n", L->number, o.c_str(), t);
+            return o == "win" ? 0 : 2;
         }
         if (cmd == "check" && argc >= 4) {
             std::ifstream mf(argv[3]); std::string line; int pass = 0, total = 0;

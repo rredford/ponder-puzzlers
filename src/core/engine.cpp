@@ -283,13 +283,13 @@ bool Game::testMove(int i) {
             return testMove(i);
         }
         if (j != 0) return false;
-        killChipBy(i);
+        if (!helmet_) killChipBy(i);   // helmet hack: Chip is a wall to monsters
         return false;
     }
     if (dying(j)) return false;
     if (type(j) == T_BLOCK) return pushBlock(j);
     if (type(j) == T_CHIP) return true;
-    killChipBy(j);
+    killChipBy(j);   // Chip walking into a monster dies, helmet or not
     return false;
 }
 

@@ -608,7 +608,33 @@ def splash(k):
 
 # ------------------------------------------------------------------ assemble
 N, E, S, W = 0, 1, 2, 3
-FONT = '/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf'
+def find_font():
+    """Locate Poppins Bold: $PONDER_FONT, common install paths, then fontconfig."""
+    import os, glob, subprocess
+    env = os.environ.get('PONDER_FONT')
+    if env:
+        return env
+    here = os.path.dirname(os.path.abspath(__file__))
+    cands = [os.path.join(here, 'Poppins-Bold.ttf'),
+             '/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf']
+    for pat in ('~/.local/share/fonts/**/Poppins-Bold.ttf', '~/.fonts/**/Poppins-Bold.ttf',
+                '/usr/share/fonts/**/Poppins-Bold.ttf', '/usr/local/share/fonts/**/Poppins-Bold.ttf'):
+        cands += glob.glob(os.path.expanduser(pat), recursive=True)
+    for c in cands:
+        if os.path.isfile(c):
+            return c
+    try:
+        out = subprocess.run(['fc-match', '-f', '%{file}', 'Poppins:bold'],
+                             capture_output=True, text=True).stdout.strip()
+        if os.path.basename(out).lower() == 'poppins-bold.ttf':
+            return out
+    except OSError:
+        pass
+    raise SystemExit('Poppins-Bold.ttf not found. Install Poppins (SIL OFL, '
+                     'https://fonts.google.com/specimen/Poppins), put Poppins-Bold.ttf in art/, '
+                     'or set PONDER_FONT=/path/to/Poppins-Bold.ttf')
+
+FONT = find_font()
 
 def build():
     sprites = []   # (name, image)

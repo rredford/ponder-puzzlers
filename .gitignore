@@ -1,3 +1,3 @@
 build/
-rom/*.lnx
+*.lnx
 *.tws

@@ -1,3 +1,5 @@
+# Made with LLM, beware of slop. I carefully ensured it works well, but be aware.
+
 # Ponder Puzzlers — a remake engine for the Atari Lynx *Chip's Challenge* cartridge
 
 Name chosen 2026-11-01 (formerly the working title "Chiplynx"). A native Linux (C++17 + SDL2) reimplementation written from the clean-room specification in `cleanroom-spec/` (project docs 00–10). **No ROM is needed:** it ships with an original 10-level set (*Pip's First Steps*), plays any standard `.dat`/`.ccl` level set (e.g. CCLP1), and can optionally read the levels straight from your own cartridge image. All graphics and audio are new (original art, newly composed music and effects); no ROM graphics, sound or code are used or shipped.
@@ -18,9 +20,12 @@ Name chosen 2026-11-01 (formerly the working title "Chiplynx"). A native Linux (
 ```sh
 sudo apt install build-essential cmake libsdl2-dev python3-pil python3-numpy   # Debian/Ubuntu (numpy: only for audio/automix.py)
 python3 art/generate.py            # (re)generates assets/ and src/app/atlas_index.hpp
+# needs the Poppins Bold font (SIL OFL): installed system-wide, Poppins-Bold.ttf in art/, or PONDER_FONT=/path/to/Poppins-Bold.ttf
 cmake -S . -B build
 cmake --build build -j
 ```
+
+Or simply run `./build.sh` (also by double-click): it builds and starts the game. `./build.sh build` only builds, `./build.sh clean` rebuilds from scratch, `./build.sh test` runs the self-test (needs your own cartridge image at `rom/game.lnx`).
 
 ## Run
 
@@ -32,11 +37,17 @@ cmake --build build -j
 ./build/ponderpuzzlers --rom game.lnx --level 4 --replay CC1.dac.tws   # watch a Tile World solution
 ```
 
-Keys: arrows / WASD move · Enter or Space confirm · P pause · R restart level · Esc title screen.
+Keys: arrows / WASD move · Enter or Space confirm · P pause · R restart level · Esc title screen (Step Mode adds Space, B and Backspace, below).
 
 Options menu: **Music** and **Sound Effects** on/off (remembered). Level music is chosen per level as on the cartridge and restarts at each attempt; the ice and force-floor sounds loop while Chip slides.
 
-Menu bar: **File → Load ROM…** (Ctrl+Shift+O, `.lnx`), **File → Load Level Pack…** (Ctrl+O, `.dat` / `.ccl`), **File → Quit** (Ctrl+Q); **Level → Select Level…** (Ctrl+G: type a number, the playable range is shown below it). F10 opens the menus from the keyboard. File dialogs use zenity or kdialog when installed, otherwise a built-in browser (`--no-native-dialogs` forces the built-in one); the last folder is remembered.
+**Hacks menu** (not part of the Lynx rules; Step Mode and Helmet are remembered; the side panel shows which hacks are in use):
+- **Step Mode:** the game only runs on key presses (holding a key keeps it stepping at normal speed; letting go stops at the end of the move). An arrow key plays one full move (4 ticks, longer if sliding leaves Chip between cells): Chip steps that way while monsters, ice and force floors carry on as usual. **Space** runs one tick and **B** one full move with Chip standing still (he can still be caught, slide or be pushed). **Backspace** undoes the last step, also after dying (the whole game state is restored: drownings, pick-ups, clones, the clock). R restarts the level. The tile animations pause with the game between steps.
+  **Level → Show Moves…** (Ctrl+M) lists the steps of the current attempt (undo takes them back): in Tile World's letters — `U D L R` a move, `-` one tick of waiting (Space adds one `-`, B as many as the ticks it ran) — in groups of 10, with a Copy button. `levelpack steps set.dat N "MOVES"` (or `@file`; add `--helmet` and `--boots=ksfw` if those hacks were used, since they are not in the list) replays such a list with the same timing.
+- **Edit Inventory…** (Ctrl+I): set the four key counts (0–255; Left/Right, Page Up/Down, or type a number) and switch each pair of boots on or off; applied with OK. In Step Mode the edit is one undo step.
+- **Helmet:** a monster or block moving into Chip is stopped as by a wall instead of killing him, so Chip can be boxed in. Walking into a monster yourself still kills Chip, as do fire, water and bombs.
+
+Menu bar: **File → Load ROM…** (Ctrl+Shift+O, `.lnx`), **File → Load Level Pack…** (Ctrl+O, `.dat` / `.ccl`), **File → Quit** (Ctrl+Q); **Level → Select Level…** (Ctrl+G: type a number, the playable range is shown below it), **Next Level** (Ctrl+N) and **Previous Level** (Ctrl+P), wrapping from the last level to the first and back. F10 opens the menus from the keyboard. File dialogs use zenity or kdialog when installed, otherwise a built-in browser (`--no-native-dialogs` forces the built-in one); the last folder is remembered.
 
 ## Level sets
 
